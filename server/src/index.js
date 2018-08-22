@@ -42,6 +42,9 @@ uploadButton.addEventListener('change', (e) => {
   if (!file) {
     return;
   }
+
+  const url = '/' + file.name;
+  rsServer.hostFile(url, file);
 });
 
 const rsServer = new ReverserverServer({ host: 'localhost', port: 8081 });
