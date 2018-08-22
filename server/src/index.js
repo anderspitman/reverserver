@@ -18,7 +18,12 @@ class ReverserverServer {
   onMessage(message) {
     console.log(message);
     if (message.type === 'GET') {
-      this.send(this._files[message.url]);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const contents = e.target.result;
+        this.send(contents);
+      };
+      reader.readAsText(this._files[message.url]);
     }
   }
 
@@ -31,8 +36,18 @@ class ReverserverServer {
   }
 }
 
+const uploadButton = document.getElementById('file_button');
+uploadButton.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) {
+    return;
+  }
+});
+
 const rsServer = new ReverserverServer({ host: 'localhost', port: 8081 });
 
-rsServer.hostFile('/', "root");
-rsServer.hostFile('/oldgregg', "HI there");
-rsServer.hostFile('/oldgregg/wc', "I do watercolors");
+const file = new File(["Hi there wc"], "og.txt", {
+  type: "text/plain",
+});
+
+rsServer.hostFile('/', file);
