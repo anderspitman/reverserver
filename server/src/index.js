@@ -25,13 +25,15 @@ class ReverserverServer {
           const contents = e.target.result;
           this.send(contents);
         };
-        reader.readAsText(this._files[message.url]);
+        //reader.readAsText(this._files[message.url]);
+        reader.readAsArrayBuffer(this._files[message.url]);
       }
     }
   }
 
   send(message) {
-    this._ws.send(JSON.stringify(message));
+    //this._ws.send(JSON.stringify(message));
+    this._ws.send(message);
   }
 
   hostFile(url, file) {
@@ -40,6 +42,12 @@ class ReverserverServer {
 }
 
 const rsServer = new ReverserverServer({ host: 'localhost', port: 8081 });
+
+const file = new File(["Hi there wc"], "og.txt", {
+  type: "text/plain",
+});
+
+rsServer.hostFile('/', file);
 
 const uploadButton = document.getElementById('file_button');
 uploadButton.addEventListener('change', (e) => {

@@ -8,7 +8,8 @@ class ReverserverClient {
       console.log("New ws connection");
       //if (this._ws === undefined) {
       ws.on('message', (message) => {
-        this.onMessage(JSON.parse(message));
+        //this.onMessage(JSON.parse(message));
+        this.onMessage(message);
       });
 
       this._ws = ws;
@@ -59,13 +60,13 @@ const rsClient = new ReverserverClient();
 http.createServer(function(req, res){
   if (req.method === 'GET') {
     rsClient.get(req.url).then((data) => {
-      res.writeHead(200, {'Content-type':'text/plan'});
+      res.writeHead(200, {'Content-type':'application/octet-stream'});
       res.write(data);
       res.end();
     })
   }
   else {
-    res.writeHead(405, {'Content-type':'text/plan'});
+    res.writeHead(405, {'Content-type':'text/plain'});
     res.write("Method not allowed");
     res.end();
   }
