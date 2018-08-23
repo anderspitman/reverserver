@@ -20,11 +20,12 @@ class ReverserverClient {
     this._resolve = null;
   }
 
-  get(url) {
+  get(url, options) {
     this.state = 'waiting';
     this.send({
       type: 'GET',
       url,
+      range: options.range,
     });
 
     return new Promise((resolve, reject) => {
@@ -59,7 +60,19 @@ const rsClient = new ReverserverClient();
 
 http.createServer(function(req, res){
   if (req.method === 'GET') {
-    rsClient.get(req.url).then((data) => {
+
+    const options = {};
+
+    if (req.headers.range) {
+      const right = req.headers.range.split('=')[1];
+      const range = right.split('-');
+      options.range = {
+        start: range[0],
+        end: range[1],
+      };
+    }
+
+    rsClient.get(req.url, options).then((data) => {
       res.writeHead(200, {'Content-type':'application/octet-stream'});
       res.write(data);
       res.end();

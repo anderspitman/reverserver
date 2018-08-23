@@ -26,7 +26,12 @@ class ReverserverServer {
           this.send(contents);
         };
         //reader.readAsText(this._files[message.url]);
-        reader.readAsArrayBuffer(this._files[message.url]);
+        let file = this._files[message.url];
+
+        if (message.range) {
+          file = file.slice(message.range.start, message.range.end);
+        }
+        reader.readAsArrayBuffer(file);
       }
     }
   }
