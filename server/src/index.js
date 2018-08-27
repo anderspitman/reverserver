@@ -14,7 +14,8 @@ class ReverserverServer {
     this._ws = ws;
     this._files = {};
     this.chunkSize = 1000000;
-    this._interrupt = false;
+
+    this._requests = {};
   }
 
   onMessage(message) {
@@ -25,7 +26,7 @@ class ReverserverServer {
         switch(message.command) {
           case 'interrupt-stream':
             console.log("stream interrupted");
-            this._interrupt = true;
+            this._requests[message.requestId].interrupt = true;
             break;
           default:
             throw "Invalid command: " + message.command;
@@ -35,6 +36,11 @@ class ReverserverServer {
       case 'GET':
         if (message.type === 'GET') {
           if (this._files[message.url] !== undefined) {
+
+            this._requests[message.requestId] = {
+              interrupt: false,
+            };
+
             //reader.readAsText(this._files[message.url]);
             let file = this._files[message.url];
 
@@ -50,12 +56,12 @@ class ReverserverServer {
               reader.onload = (e) => {
                 console.log("done reading");
                 const contents = e.target.result;
-                this.send(contents);
+                this.sendData(message.requestId, contents);
               };
               reader.readAsArrayBuffer(file);
             }
             else {
-              this.sendChunkedFile(file);
+              this.sendChunkedFile(message.requestId, file);
             }
           }
           else {
@@ -69,15 +75,15 @@ class ReverserverServer {
     }
   }
 
-  sendChunkedFile(file) {
+  sendChunkedFile(requestId, file) {
     const size = file.size;
 
     this.sendCommand({ type: 'start-stream' });
 
     const sendChunks = (sendIndex) => {
 
-      if (this._interrupt === true) {
-        this._interrupt = false;
+      if (this._requests[requestId].interrupt === true) {
+        this._requests[requestId].interrupt = false;
         return;
       }
 
@@ -95,7 +101,7 @@ class ReverserverServer {
         reader.onload = (e) => {
           //console.log("done reading");
           const contents = e.target.result;
-          this.send(contents);
+          this.sendData(requestId, contents);
           sendChunks(sendIndex + slice.size);
         };
         reader.readAsArrayBuffer(slice);
@@ -110,6 +116,19 @@ class ReverserverServer {
 
   sendCommand(command) {
     this.send(JSON.stringify(command));
+  }
+
+  sendData(requestId, data) {
+    if (this._channel !== requestId) {
+      console.log(requestId);
+      this._channel = requestId;
+      this.sendCommand({
+        type: 'change-channel',
+        channel: requestId,
+      });
+    }
+
+    this.send(data);
   }
 
   send(message) {
