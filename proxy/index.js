@@ -26,7 +26,6 @@ class ReverserverClient {
       //}
     });
 
-    this.state = 'idle';
     //this._resolve = null;
     //this._onData = null;
     //this._onEnd = null;
@@ -43,12 +42,24 @@ class ReverserverClient {
 
   createGetRequest() {
     const id = this.getRequestId();
-    return new GetRequest(id);
+    const get = new GetRequest(id);
+
+    get.setCloseHandler(() => {
+      this.send({
+        type: 'command',
+        command: 'interrupt-stream',
+        requestId: id,
+      });
+    });
+
+    get.setFinishHandler(() => {
+      delete this._requests[get.getId()];
+    });
+
+    return get;
   }
 
   get(url, options) {
-
-    this.state = 'receiving';
 
     const getRequest = this.createGetRequest();
 
@@ -82,76 +93,20 @@ class ReverserverClient {
   }
 
   onCommand(command) {
-    console.log(command, this.state);
-    switch(command.type) {
-      case 'start-stream':
-        this.state = 'streaming';
-        break;
-      case 'end-stream':
-        if (this.state === 'streaming') {
-          this.state = 'idle';
-          //this._onEnd();
-          this._requests[command.requestId].onEnd();
-          //this._onData = null;
-          delete this._requests[command.requestId];
-          //this._onEnd = null;
-        }
-        else {
-          throw "Unexpected end-stream";
-        }
-        break;
-      case 'change-channel':
-        this.channel = command.channel;
-        break;
-      default:
-        throw "Invalid command type : " + command.type;
-        break;
+
+    if (command.type === 'change-channel') {
+      this.requestId = command.requestId;
+    }
+    else {
+      this._requests[command.requestId].onCommand(command);
+      // TODO: remove if command is end-stream
+      //delete this._requests[command.requestId];
     }
   }
 
   onMessage(message) {
-    //console.log(message);
-    switch(this.state) {
-      case 'idle':
-        break;
-      case 'streaming':
-        console.log(this.channel);
-        //this._onData(message);
-        this._requests[this.channel].onData(message);
-        break;
-      case 'receiving':
-        console.log(this.channel);
-        //this._onData(message);
-        this._requests[this.channel].onData(message, () => {
-          this._requests[this.channel].onEnd();
-          delete this._requests[this.channel];
-        });
-        //this._onEnd();
-        //this._onData = null;
-        //this._onEnd = null;
-        break;
-      default:
-        throw "Invalid state: " + this.state;
-        break;
-    }
-  }
-
-  handleClose(requestId) {
-    switch(this.state) {
-      case 'streaming':
-        this.send({
-          type: 'command',
-          command: 'interrupt-stream',
-          requestId,
-        });
-        break;
-      case 'idle':
-        console.log("Closing while idle");
-        break;
-      default:
-        throw "handleClose invalid state: " + this.state;
-        break;
-    }
+    this._requests[this.requestId].onMessage(message);
+    // TODO: remove if done
   }
 }
 
@@ -160,6 +115,7 @@ class GetRequest {
     this._id = id;
     this._onData = null;
     this._onEnd = null;
+    this.state = 'receiving';
   }
 
   getId() {
@@ -174,12 +130,90 @@ class GetRequest {
     this._onEnd();
   }
 
+  onError(message) {
+    this._onError(message);
+  }
+
+  onFinish() {
+    this._onFinish();
+  }
+
   setDataHandler(callback) {
     this._onData = callback;
   }
 
   setEndHandler(callback) {
     this._onEnd = callback;
+  }
+
+  setErrorHandler(callback) {
+    this._onError = callback;
+  }
+
+  setCloseHandler(callback) {
+    this._onClose = callback;
+  }
+
+  setFinishHandler(callback) {
+    this._onFinish = callback;
+  }
+
+  onCommand(command) {
+    switch(command.type) {
+      case 'start-stream':
+        this.state = 'streaming';
+        break;
+      case 'end-stream':
+        if (this.state === 'streaming') {
+          this.state = 'idle';
+          this.onEnd();
+          this.onFinish();
+        }
+        else {
+          throw "Unexpected end-stream";
+        }
+        break;
+      case 'not-found':
+        this.onError(command);
+        this.onFinish();
+        break;
+      default:
+        throw "Invalid command type : " + command.type;
+        break;
+    }
+  }
+
+  onMessage(message) {
+    switch(this.state) {
+      case 'idle':
+        break;
+      case 'streaming':
+        this.onData(message);
+        break;
+      case 'receiving':
+        this.onData(message, () => {
+          this.onEnd();
+          this.onFinish();
+        });
+        break;
+      default:
+        throw "Invalid state: " + this.state;
+        break;
+    }
+  }
+
+  close() {
+    switch(this.state) {
+      case 'streaming':
+        this._onClose();
+        break;
+      case 'idle':
+        console.log("Closing while idle");
+        break;
+      default:
+        throw "close invalid state: " + this.state;
+        break;
+    }
   }
 }
 
@@ -188,7 +222,7 @@ const wss = new WebSocket.Server({ port: 8081 });
 const rsClient = new ReverserverClient();
 
 http.createServer(function(req, res){
-  console.log(req.method);
+  console.log(req.method, req.url);
   if (req.method === 'GET') {
 
     const options = {};
@@ -207,12 +241,18 @@ http.createServer(function(req, res){
     res.writeHead(200, {'Content-type':'application/octet-stream'});
 
     get.setDataHandler((data, callback) => {
-      console.log("write data");
+      //console.log("write data");
       res.write(data, null, callback);
     });
 
     get.setEndHandler(() => {
-      console.log("end data");
+      //console.log("end data: " + get.getId());
+      res.end();
+    });
+
+    get.setErrorHandler((message) => {
+      res.writeHead(500, {'Content-type':'text/plain'});
+      res.write("Error");
       res.end();
     });
 
@@ -225,7 +265,7 @@ http.createServer(function(req, res){
     //});
 
     res.on('close', (e) => {
-      rsClient.handleClose(get.getId());
+      get.close();
     });
   }
   else {

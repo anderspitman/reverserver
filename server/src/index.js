@@ -20,7 +20,6 @@ class ReverserverServer {
 
   onMessage(message) {
 
-    console.log(message);
     switch(message.type) {
       case 'command':
         switch(message.command) {
@@ -66,6 +65,10 @@ class ReverserverServer {
           }
           else {
             console.log(`File ${message.url} not found`);
+            this.sendCommand({
+              type: 'not-found',
+              requestId: message.requestId,
+            });
           }
         }
         break;
@@ -78,12 +81,20 @@ class ReverserverServer {
   sendChunkedFile(requestId, file) {
     const size = file.size;
 
-    this.sendCommand({ type: 'start-stream' });
+    this.sendCommand({
+      type: 'start-stream',
+      requestId,
+    });
 
     const sendChunks = (sendIndex) => {
 
       if (this._requests[requestId].interrupt === true) {
         this._requests[requestId].interrupt = false;
+
+        this.sendCommand({
+          type: 'end-stream',
+          requestId,
+        });
         return;
       }
 
@@ -95,8 +106,6 @@ class ReverserverServer {
         const chunkEnd = sendIndex + this.chunkSize;
         const slice = file.slice(chunkStart, chunkEnd);
 
-        console.log(slice.size);
-
         const reader = new FileReader();
         reader.onload = (e) => {
           //console.log("done reading");
@@ -107,7 +116,10 @@ class ReverserverServer {
         reader.readAsArrayBuffer(slice);
       }
       else {
-        this.sendCommand({ type: 'end-stream' });
+        this.sendCommand({
+          type: 'end-stream',
+          requestId,
+        });
       }
     };
 
@@ -120,11 +132,10 @@ class ReverserverServer {
 
   sendData(requestId, data) {
     if (this._channel !== requestId) {
-      console.log(requestId);
       this._channel = requestId;
       this.sendCommand({
         type: 'change-channel',
-        channel: requestId,
+        requestId,
       });
     }
 
