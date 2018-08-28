@@ -165,7 +165,6 @@ class GetRequest {
         break;
       case 'end-stream':
         if (this.state === 'streaming') {
-          this.state = 'idle';
           this.onEnd();
           this.onFinish();
         }
@@ -185,8 +184,6 @@ class GetRequest {
 
   onMessage(message) {
     switch(this.state) {
-      case 'idle':
-        break;
       case 'streaming':
         this.onData(message);
         break;
@@ -207,8 +204,8 @@ class GetRequest {
       case 'streaming':
         this._onClose();
         break;
-      case 'idle':
-        console.log("Closing while idle");
+      case 'receiving':
+        console.log("Closing while receiving");
         break;
       default:
         throw "close invalid state: " + this.state;
