@@ -152,7 +152,8 @@ class ReverserverServer {
   }
 }
 
-const rsServer = new ReverserverServer({ host: 'localhost', port: 8081 });
+const host = window.location.hostname;
+const rsServer = new ReverserverServer({ host, port: 8081 });
 
 const file = new File(["Hi there wc"], "og.txt", {
   type: "text/plain",
