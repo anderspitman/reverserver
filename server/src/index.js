@@ -29,7 +29,14 @@
 
       this._ws = ws;
       this._files = {};
-      this.chunkSize = 1000000;
+      this.chunkSizeBytes = 1000000;
+
+      const chunkSizeMb = (this.chunkSizeBytes / 1000000) * 8;
+      const maxBitrateMbps = 1;
+      const chunksPerSecond = chunkSizeMb * maxBitrateMbps;
+      const delaySeconds = 1 / chunksPerSecond;
+      this.delayMS = delaySeconds * 1000;
+      console.log(this.delayMS);
 
       this._requests = {};
     }
@@ -60,13 +67,18 @@
               let file = this._files[message.url];
 
               if (message.range) {
-                file = file.slice(message.range.start, message.range.end);
+                if (message.range.end !== '') {
+                  file = file.slice(message.range.start, message.range.end);
+                }
+                else {
+                  file = file.slice(message.range.start);
+                }
               }
-              console.log(`read file: ${message.url}`);
+              console.log(`read file: ${message.url}`, message.range);
 
               console.log(file.size);
 
-              if (file.size <= this.chunkSize) {
+              if (file.size <= this.chunkSizeBytes) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                   console.log("done reading");
@@ -119,15 +131,18 @@
         if (sendIndex < size) {
 
           const chunkStart = sendIndex;
-          const chunkEnd = sendIndex + this.chunkSize;
+          const chunkEnd = sendIndex + this.chunkSizeBytes;
           const slice = file.slice(chunkStart, chunkEnd);
 
           const reader = new FileReader();
           reader.onload = (e) => {
-            //console.log("done reading");
+            //console.log("send for " + url);
             const contents = e.target.result;
             this.sendData(requestId, contents);
-            sendChunks(sendIndex + slice.size);
+
+            setTimeout(() => {
+              sendChunks(sendIndex + slice.size);
+            }, this.delayMS);
           };
           reader.readAsArrayBuffer(slice);
         }
