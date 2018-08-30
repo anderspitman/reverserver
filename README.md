@@ -8,10 +8,14 @@ can easily be in the 20GB-200GB range), and you want to make
 to that file (ie only download specific chunks) as though it were hosted on a
 normal server, this will allow that.
 
+NOTE: This is a very early work in progress and not intended to be used for
+anything production ready at the moment.
+
 # Example usage
 
 First start up the proxy server. We'll assume it's publicly available at
-example.com:
+example.com. It's currently hard-coded to listen for HTTP on port 7000 and
+websocket connections on 8081.
 
 ```bash
 node proxy/index.js
@@ -46,4 +50,10 @@ curl example.com:7000/file1
 Hi there
 curl example.com:7000/file2
 I'm Old Gregg
+```
+
+Ranged requests work too:
+```bash
+curl -H "Range: bytes=0-2" example.com:7000/file1
+Hi
 ```
