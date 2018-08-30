@@ -105,6 +105,9 @@ class ReverserverClient {
   }
 
   onMessage(message) {
+    console.log(this._ws._socket.bytesRead);
+    //console.log(this._requests);
+    //console.log(message);
     this._requests[this.requestId].onMessage(message);
     // TODO: remove if done
   }
@@ -172,7 +175,7 @@ class GetRequest {
           throw "Unexpected end-stream";
         }
         break;
-      case 'not-found':
+      case 'error':
         this.onError(command);
         this.onFinish();
         break;
@@ -218,8 +221,10 @@ class GetRequest {
 const wss = new WebSocket.Server({ port: 8081 });
 const rsClient = new ReverserverClient();
 
+const closed = {};
+
 http.createServer(function(req, res){
-  console.log(req.method, req.url);
+  console.log(req.method, req.url, req.headers);
   if (req.method === 'GET') {
 
     const options = {};
@@ -234,22 +239,27 @@ http.createServer(function(req, res){
     }
 
     const get = rsClient.get(req.url, options);
+    console.log("id: " + get.getId());
     
     res.writeHead(200, {'Content-type':'application/octet-stream'});
 
     get.setDataHandler((data, callback) => {
-      //console.log("write data");
-      res.write(data, null, callback);
+      if (!closed[get.getId()]) {
+        //console.log("send data for " + get.getId());
+        res.write(data, null, callback);
+      }
     });
 
     get.setEndHandler(() => {
-      //console.log("end data: " + get.getId());
-      res.end();
+      if (!closed[get.getId()]) {
+        console.log("end data: " + get.getId());
+        res.end();
+      }
     });
 
-    get.setErrorHandler((message) => {
-      res.writeHead(500, {'Content-type':'text/plain'});
-      res.write("Error");
+    get.setErrorHandler((e) => {
+      console.log("Error:", e);
+      res.writeHead(e.code, e.message, {'Content-type':'text/plain'});
       res.end();
     });
 
@@ -262,6 +272,8 @@ http.createServer(function(req, res){
     //});
 
     res.on('close', (e) => {
+      console.log("close " + get.getId());
+      closed[get.getId()] = true;
       get.close();
     });
   }
