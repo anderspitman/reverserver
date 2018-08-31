@@ -28,6 +28,9 @@
 
       const url = '/' + file.name;
       rsServer.hostFile(url, file);
+
+      //const stream = rsServer.fileReaderStream(file);
+      //stream.pipe(rsServer.wsStream);
     });
 
     </script>

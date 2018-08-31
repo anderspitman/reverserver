@@ -1,21 +1,64 @@
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as an anonymous module. Also return global
-    define(['websocket-stream'], function(websocket) {
-      return (root.reverserver = factory(websocket));
+    define(['websocket-stream', 'filereader-stream'],
+    function(websocket, fileReaderStream) {
+      return (root.reverserver = factory(websocket, fileReaderStream));
     });
   } else if (typeof module === 'object' && module.exports) {
     // Node. Does not work with strict CommonJS, but
     // only CommonJS-like environments that support module.exports,
     // like Node.
-    module.exports = factory(require('websocket-stream'));
+    module.exports = factory(
+      require('websocket-stream'),
+      require('filereader-stream'));
   } else {
     // Browser globals (root is window)
-    root.reverserver = factory(websocket);
+    root.reverserver = factory(websocket, fileReaderStream);
   }
-}(typeof self !== 'undefined' ? self : this, function (websocket) {
+}(typeof self !== 'undefined' ? self : this,
 
-  console.log(websocket);
+function (wsStreamMaker, fileReaderStream) {
+
+
+  class StreamPool {
+    constructor({ host, port }) {
+      this._idleStreams = [];
+      this._wsStreamString = `ws://${host}:${port}`;
+      this._nextId = 0;
+    }
+
+    getStream() {
+
+      if (this._idleStreams.length === 0) {
+        this._addStream();
+      }
+      
+      return this._idleStreams.pop();
+    }
+
+    releaseStream(stream) {
+      this._idleStreams.push(stream);
+    }
+
+    createStream() {
+      const wsStream = wsStreamMaker(this._wsStreamString, {
+        perMessageDeflate: false,
+        // 10MB unless my math is wrong
+        browserBufferSize: 10 * 1024 * 1024,
+      });
+
+      wsStream._id = this._nextId;
+      this._nextId += 1;
+
+      console.log(wsStream);
+      return wsStream;
+    }
+
+    _addStream() {
+      this._idleStreams.push(this.createStream());
+    }
+  }
 
   class Server {
 
@@ -34,12 +77,14 @@
       this._files = {};
       this.chunkSizeBytes = 1000000;
 
-      const chunkSizeMb = (this.chunkSizeBytes / 1000000) * 8;
-      const maxBitrateMbps = 1;
-      const chunksPerSecond = chunkSizeMb * maxBitrateMbps;
-      const delaySeconds = 1 / chunksPerSecond;
-      this.delayMS = delaySeconds * 1000;
-      console.log(this.delayMS);
+      const streamPort = port + 1;
+      this._streamPool = new StreamPool({ host, port: streamPort });
+      //const s1 = this._streamPool.createStream();
+      //const s2 = this._streamPool.createStream();
+
+      const file = new File(["Hi there"], "og.txt", {
+        type: "text/plain",
+      });
 
       this._requests = {};
     }
@@ -81,18 +126,23 @@
 
               console.log(file.size);
 
-              if (file.size <= this.chunkSizeBytes) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                  console.log("done reading");
-                  const contents = e.target.result;
-                  this.sendData(message.requestId, contents);
-                };
-                reader.readAsArrayBuffer(file);
-              }
-              else {
-                this.sendChunkedFile(message.requestId, file);
-              }
+              const fileStream = fileReaderStream(file);
+              const stream = this._streamPool.createStream();
+              stream.write(String(message.requestId));
+              fileStream.pipe(stream);
+
+              //if (file.size <= this.chunkSizeBytes) {
+              //  const reader = new FileReader();
+              //  reader.onload = (e) => {
+              //    console.log("done reading");
+              //    const contents = e.target.result;
+              //    this.sendData(message.requestId, contents);
+              //  };
+              //  reader.readAsArrayBuffer(file);
+              //}
+              //else {
+              //  this.sendChunkedFile(message.requestId, file);
+              //}
             }
             else {
               console.log(`File ${message.url} not found`);
@@ -145,9 +195,6 @@
             const contents = e.target.result;
             this.sendData(requestId, contents);
 
-            //setTimeout(() => {
-            //  sendChunks(sendIndex + slice.size);
-            //}, this.delayMS);
             sendChunks(sendIndex + slice.size);
           };
           reader.readAsArrayBuffer(slice);

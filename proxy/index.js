@@ -35,6 +35,52 @@ class ReverserverClient {
     this._nextRequestId = 0;
 
     this._requests = {};
+
+    const handler = (stream) => {
+
+      //const oldMessageHandler = stream.socket.onmessage;
+      //stream.socket.onmessage = function(message) {
+      //  if (typeof message === 'string') {
+      //    console.log("there");
+      //    try {
+      //      const parsed = JSON.parse(message);
+      //      console.log(parsed);
+      //    }
+      //    catch(e) {
+      //      console.log(e);
+      //    }
+      //  }
+      //  else {
+      //    console.log("here");
+      //    oldMessageHandler(message);
+      //  }
+      //}
+      //stream.pipe(process.stdout);
+
+      // first message should just be a number indicating the requestId to
+      // attach this stream to.
+      const setIdHandler = (data) => {
+        const id = Number(String(data));
+        console.log("set id: " + id);
+        stream.removeListener('data', setIdHandler);
+        const res = this._requests[id];
+
+        res.on('close', () => {
+          //stream.unpipe();
+          stream.socket.close();
+        });
+
+        stream.pipe(res);
+      };
+
+      stream.on('data', setIdHandler);
+    };
+
+    const httpServer = http.createServer().listen(8082);
+    const wsStreamServer = new wsStream.createServer({
+      server: httpServer,
+      perMessageDeflate: false,
+    }, handler);
   }
 
   getRequestId() {
@@ -97,14 +143,27 @@ class ReverserverClient {
 
   onCommand(command) {
 
-    if (command.type === 'change-channel') {
-      this.requestId = command.requestId;
+    switch(command.type) {
+      case 'error':
+        const res = this._requests[command.requestId];
+        const e = command;
+        console.log("Error:", e);
+        res.writeHead(e.code, e.message, {'Content-type':'text/plain'});
+        res.end();
+        break;
+      default:
+        throw "Invalid command type: " + command.type
+        break;
     }
-    else {
-      this._requests[command.requestId].onCommand(command);
-      // TODO: remove if command is end-stream
-      //delete this._requests[command.requestId];
-    }
+
+    //if (command.type === 'change-channel') {
+    //  this.requestId = command.requestId;
+    //}
+    //else {
+    //  this._requests[command.requestId].onCommand(command);
+    //  // TODO: remove if command is end-stream
+    //  //delete this._requests[command.requestId];
+    //}
   }
 
   onMessage(message) {
@@ -221,11 +280,13 @@ class GetRequest {
 }
 
 
-const rsClient = new ReverserverClient();
 
 const closed = {};
 
-http.createServer(function(req, res){
+const httpServer = http.createServer(httpHandler).listen(7000);
+const rsClient = new ReverserverClient();
+
+function httpHandler(req, res){
   console.log(req.method, req.url, req.headers);
   if (req.method === 'GET') {
 
@@ -240,48 +301,59 @@ http.createServer(function(req, res){
       };
     }
 
-    const get = rsClient.get(req.url, options);
-    console.log("id: " + get.getId());
-    
     res.writeHead(200, {'Content-type':'application/octet-stream'});
 
-    get.setDataHandler((data, callback) => {
-      if (!closed[get.getId()]) {
-        //console.log("send data for " + get.getId());
-        res.write(data, null, callback);
-      }
+    const requestId = rsClient.getRequestId();
+
+    rsClient.send({
+      type: 'GET',
+      url: req.url,
+      range: options.range,
+      requestId,
     });
 
-    get.setEndHandler(() => {
-      if (!closed[get.getId()]) {
-        console.log("end data: " + get.getId());
-        res.end();
-      }
-    });
+    rsClient._requests[requestId] = res;
 
-    get.setErrorHandler((e) => {
-      console.log("Error:", e);
-      res.writeHead(e.code, e.message, {'Content-type':'text/plain'});
-      res.end();
-    });
+    //const get = rsClient.get(req.url, options);
+    //console.log("id: " + get.getId());
 
-    //get.onData((data) => {
-    //  res.write(data);
+    //get.setDataHandler((data, callback) => {
+    //  if (!closed[get.getId()]) {
+    //    //console.log("send data for " + get.getId());
+    //    res.write(data, null, callback);
+    //  }
     //});
 
-    //get.onEnd(() => {
+    //get.setEndHandler(() => {
+    //  if (!closed[get.getId()]) {
+    //    console.log("end data: " + get.getId());
+    //    res.end();
+    //  }
+    //});
+
+    //get.setErrorHandler((e) => {
+    //  console.log("Error:", e);
+    //  res.writeHead(e.code, e.message, {'Content-type':'text/plain'});
     //  res.end();
     //});
 
-    res.on('close', (e) => {
-      console.log("close " + get.getId());
-      closed[get.getId()] = true;
-      get.close();
-    });
+    ////get.onData((data) => {
+    ////  res.write(data);
+    ////});
+
+    ////get.onEnd(() => {
+    ////  res.end();
+    ////});
+
+    //res.on('close', (e) => {
+    //  console.log("close " + get.getId());
+    //  closed[get.getId()] = true;
+    //  get.close();
+    //});
   }
   else {
     res.writeHead(405, {'Content-type':'text/plain'});
     res.write("Method not allowed");
     res.end();
   }
-}).listen(7000);
+}
