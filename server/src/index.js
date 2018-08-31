@@ -75,43 +75,18 @@ function (wsStreamMaker, fileReaderStream) {
 
       this._ws = ws;
       this._files = {};
-      this.chunkSizeBytes = 1000000;
 
       const streamPort = port + 1;
       this._streamPool = new StreamPool({ host, port: streamPort });
-      //const s1 = this._streamPool.createStream();
-      //const s2 = this._streamPool.createStream();
-
-      const file = new File(["Hi there"], "og.txt", {
-        type: "text/plain",
-      });
-
-      this._requests = {};
     }
 
     onMessage(message) {
 
       switch(message.type) {
-        case 'command':
-          switch(message.command) {
-            case 'interrupt-stream':
-              console.log("stream interrupted");
-              this._requests[message.requestId].interrupt = true;
-              break;
-            default:
-              throw "Invalid command: " + message.command;
-              break;
-          }
-          break;
         case 'GET':
           if (message.type === 'GET') {
             if (this._files[message.url] !== undefined) {
 
-              this._requests[message.requestId] = {
-                interrupt: false,
-              };
-
-              //reader.readAsText(this._files[message.url]);
               let file = this._files[message.url];
 
               if (message.range) {
@@ -130,19 +105,6 @@ function (wsStreamMaker, fileReaderStream) {
               const stream = this._streamPool.createStream();
               stream.write(String(message.requestId));
               fileStream.pipe(stream);
-
-              //if (file.size <= this.chunkSizeBytes) {
-              //  const reader = new FileReader();
-              //  reader.onload = (e) => {
-              //    console.log("done reading");
-              //    const contents = e.target.result;
-              //    this.sendData(message.requestId, contents);
-              //  };
-              //  reader.readAsArrayBuffer(file);
-              //}
-              //else {
-              //  this.sendChunkedFile(message.requestId, file);
-              //}
             }
             else {
               console.log(`File ${message.url} not found`);
@@ -161,69 +123,8 @@ function (wsStreamMaker, fileReaderStream) {
       }
     }
 
-    sendChunkedFile(requestId, file) {
-      const size = file.size;
-
-      this.sendCommand({
-        type: 'start-stream',
-        requestId,
-      });
-
-      const sendChunks = (sendIndex) => {
-
-        if (this._requests[requestId].interrupt === true) {
-          this._requests[requestId].interrupt = false;
-
-          this.sendCommand({
-            type: 'end-stream',
-            requestId,
-          });
-          return;
-        }
-
-        //console.log(sendIndex);
-
-        if (sendIndex < size) {
-
-          const chunkStart = sendIndex;
-          const chunkEnd = sendIndex + this.chunkSizeBytes;
-          const slice = file.slice(chunkStart, chunkEnd);
-
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            //console.log("send for " + url);
-            const contents = e.target.result;
-            this.sendData(requestId, contents);
-
-            sendChunks(sendIndex + slice.size);
-          };
-          reader.readAsArrayBuffer(slice);
-        }
-        else {
-          this.sendCommand({
-            type: 'end-stream',
-            requestId,
-          });
-        }
-      };
-
-      sendChunks(0);
-    }
-
     sendCommand(command) {
       this.send(JSON.stringify(command));
-    }
-
-    sendData(requestId, data) {
-      if (this._channel !== requestId) {
-        this._channel = requestId;
-        this.sendCommand({
-          type: 'change-channel',
-          requestId,
-        });
-      }
-
-      this.send(data);
     }
 
     send(message) {
