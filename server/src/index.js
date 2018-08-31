@@ -1,19 +1,22 @@
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as an anonymous module. Also return global
-    define([], function() {
-      return (root.reverserver = factory());
+    define(['websocket-stream'], function(websocket) {
+      return (root.reverserver = factory(websocket));
     });
   } else if (typeof module === 'object' && module.exports) {
     // Node. Does not work with strict CommonJS, but
     // only CommonJS-like environments that support module.exports,
     // like Node.
-    module.exports = factory();
+    module.exports = factory(require('websocket-stream'));
   } else {
     // Browser globals (root is window)
-    root.reverserver = factory();
+    root.reverserver = factory(websocket);
   }
-}(typeof self !== 'undefined' ? self : this, function () {
+}(typeof self !== 'undefined' ? self : this, function (websocket) {
+
+  console.log(websocket);
+
   class Server {
 
     constructor({ host, port }) {
@@ -94,7 +97,9 @@
             else {
               console.log(`File ${message.url} not found`);
               this.sendCommand({
-                type: 'not-found',
+                type: 'error',
+                code: 404,
+                message: "File not found",
                 requestId: message.requestId,
               });
             }
@@ -140,9 +145,10 @@
             const contents = e.target.result;
             this.sendData(requestId, contents);
 
-            setTimeout(() => {
-              sendChunks(sendIndex + slice.size);
-            }, this.delayMS);
+            //setTimeout(() => {
+            //  sendChunks(sendIndex + slice.size);
+            //}, this.delayMS);
+            sendChunks(sendIndex + slice.size);
           };
           reader.readAsArrayBuffer(slice);
         }

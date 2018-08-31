@@ -11,5 +11,8 @@
   "devDependencies": {
     "webpack": "^4.17.1",
     "webpack-cli": "^3.1.0"
+  },
+  "dependencies": {
+    "websocket-stream": "^5.1.2"
   }
 }

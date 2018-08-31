@@ -9,6 +9,7 @@
   "author": "Anders Pitman",
   "license": "MIT",
   "dependencies": {
+    "websocket-stream": "^5.1.2",
     "ws": "^6.0.0"
   }
 }

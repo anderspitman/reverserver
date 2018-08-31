@@ -1,9 +1,12 @@
-const WebSocket = require('ws');
 const http = require('http');
+const WebSocket = require('ws');
+const wsStream = require('websocket-stream');
 
 
 class ReverserverClient {
   constructor() {
+
+    const wss = new WebSocket.Server({ port: 8081 });
     wss.on('connection', (ws) => {
       console.log("New ws connection");
       //if (this._ws === undefined) {
@@ -105,7 +108,7 @@ class ReverserverClient {
   }
 
   onMessage(message) {
-    console.log(this._ws._socket.bytesRead);
+    //console.log(this._ws._socket.bytesRead);
     //console.log(this._requests);
     //console.log(message);
     this._requests[this.requestId].onMessage(message);
@@ -218,7 +221,6 @@ class GetRequest {
 }
 
 
-const wss = new WebSocket.Server({ port: 8081 });
 const rsClient = new ReverserverClient();
 
 const closed = {};
