@@ -87,9 +87,14 @@ function (wsStreamMaker, fileReaderStream) {
           if (message.type === 'GET') {
             if (this._files[message.url] !== undefined) {
 
-              let file = this._files[message.url];
+              const fullFile = this._files[message.url];
+
+              let file = fullFile;
+
+              console.log(`read file: ${message.url}`);
 
               if (message.range) {
+                console.log(message.range, file.size);
                 if (message.range.end !== '') {
                   file = file.slice(message.range.start, message.range.end);
                 }
@@ -97,13 +102,16 @@ function (wsStreamMaker, fileReaderStream) {
                   file = file.slice(message.range.start);
                 }
               }
-              console.log(`read file: ${message.url}`, message.range);
 
-              console.log(file.size);
+              console.log(message.range, file.size);
 
               const fileStream = fileReaderStream(file);
               const stream = this._streamPool.createStream();
-              stream.write(String(message.requestId));
+              stream.write(JSON.stringify({
+                id: message.requestId,
+                size: fullFile.size,
+                range: message.range,
+              }));
               fileStream.pipe(stream);
             }
             else {
