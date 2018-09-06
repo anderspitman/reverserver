@@ -1,6 +1,7 @@
 const http = require('http');
 const WebSocket = require('ws');
 const wsStream = require('websocket-stream');
+const WebSocketStream = require('ws-streamify').default;
 
 
 class ReverserverClient {
@@ -27,51 +28,95 @@ class ReverserverClient {
 
     this._requests = {};
 
-    const handler = (stream) => {
+    const streamHandler = (stream, settings) => {
 
-      // first message should just be a number indicating the requestId to
-      // attach this stream to.
-      const setIdHandler = (data) => {
-        const json = JSON.parse(data);
-        console.log(json);
-        const id = json.id;
-        console.log("set id: " + id);
-        stream.removeListener('data', setIdHandler);
-        const res = this._requests[id];
+      const id = settings.id;
+      const res = this._requests[id];
 
-        res.on('close', () => {
-          stream.socket.close();
-        });
+      res.on('close', () => {
+        stream.socket.close();
+      });
 
-        if (json.range) {
-          let end;
-          if (json.range.end) {
-            end = json.range.end;
-          }
-          else {
-            end = json.size - 1;
-          }
-
-          const len = end - json.range.start;
-          res.setHeader('Content-Range', `bytes ${json.range.start}-${end}/${json.size}`);
-          res.setHeader('Content-Length', len + 1);
-          res.setHeader('Accept-Ranges', 'bytes');
-          res.statusCode = 206;
+      if (settings.range) {
+        let end;
+        if (settings.range.end) {
+          end = settings.range.end;
+        }
+        else {
+          end = settings.size - 1;
         }
 
-        res.setHeader('Content-Type', 'application/octet-stream');
+        const len = end - settings.range.start;
+        res.setHeader('Content-Range', `bytes ${settings.range.start}-${end}/${settings.size}`);
+        res.setHeader('Content-Length', len + 1);
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.statusCode = 206;
+      }
 
-        stream.pipe(res);
-      };
+      res.setHeader('Content-Type', 'application/octet-stream');
 
-      stream.on('data', setIdHandler);
+      stream.pipe(res);
+
+      //// first message should just be a number indicating the requestId to
+      //// attach this stream to.
+      //const setIdHandler = (data) => {
+      //  console.log(data.slice(0, 100).toString('utf-8'));
+      //  const json = JSON.parse(data);
+      //  console.log(json);
+      //  const id = json.id;
+      //  console.log("set id: " + id);
+      //  stream.removeListener('data', setIdHandler);
+      //  const res = this._requests[id];
+
+      //  res.on('close', () => {
+      //    stream.socket.close();
+      //  });
+
+      //  if (json.range) {
+      //    let end;
+      //    if (json.range.end) {
+      //      end = json.range.end;
+      //    }
+      //    else {
+      //      end = json.size - 1;
+      //    }
+
+      //    const len = end - json.range.start;
+      //    res.setHeader('Content-Range', `bytes ${json.range.start}-${end}/${json.size}`);
+      //    res.setHeader('Content-Length', len + 1);
+      //    res.setHeader('Accept-Ranges', 'bytes');
+      //    res.statusCode = 206;
+      //  }
+
+      //  res.setHeader('Content-Type', 'application/octet-stream');
+
+      //  stream.pipe(res);
+      //};
+
+      //stream.on('data', setIdHandler);
     };
 
-    const httpServer = http.createServer().listen(8082);
-    const wsStreamServer = new wsStream.createServer({
-      server: httpServer,
-      perMessageDeflate: false,
-    }, handler);
+    const wsHandler = (ws) => {
+
+      const messageHandler = (message) => {
+        ws.removeListener('message', messageHandler);
+        const settings = JSON.parse(message.data);
+        console.log("settings:");
+        console.log(settings);
+        const stream = new WebSocketStream(ws, { highWaterMark: 1024 })
+        streamHandler(stream, settings);
+      };
+
+      ws.addEventListener('message', messageHandler);
+    };
+
+    //const httpServer = http.createServer().listen(8082);
+    //const wsStreamServer = new wsStream.createServer({
+    //  server: httpServer,
+    //  perMessageDeflate: false,
+    //}, streamHandler);
+
+    new WebSocket.Server({ port: 8082 }).on('connection', wsHandler);
   }
 
   getRequestId() {
