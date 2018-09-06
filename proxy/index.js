@@ -32,7 +32,9 @@ class ReverserverClient {
       // first message should just be a number indicating the requestId to
       // attach this stream to.
       const setIdHandler = (data) => {
-        const id = Number(String(data));
+        const json = JSON.parse(data);
+        console.log(json);
+        const id = json.id;
         console.log("set id: " + id);
         stream.removeListener('data', setIdHandler);
         const res = this._requests[id];
@@ -40,6 +42,24 @@ class ReverserverClient {
         res.on('close', () => {
           stream.socket.close();
         });
+
+        if (json.range) {
+          let end;
+          if (json.range.end) {
+            end = json.range.end;
+          }
+          else {
+            end = json.size - 1;
+          }
+
+          const len = end - json.range.start;
+          res.setHeader('Content-Range', `bytes ${json.range.start}-${end}/${json.size}`);
+          res.setHeader('Content-Length', len + 1);
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.statusCode = 206;
+        }
+
+        res.setHeader('Content-Type', 'application/octet-stream');
 
         stream.pipe(res);
       };
@@ -94,15 +114,32 @@ function httpHandler(req, res){
     const options = {};
 
     if (req.headers.range) {
+
+      options.range = {};
+
       const right = req.headers.range.split('=')[1];
       const range = right.split('-');
-      options.range = {
-        start: range[0],
-        end: range[1],
-      };
+      options.range.start = Number(range[0]);
+
+      if (range[1]) {
+        options.range.end = Number(range[1]);
+      }
+      //else {
+      //  options.end = stats.size - 1;
+      //}
+
+      //const len = options.range.end - options.range.start;
+      res.statusCode = 206;
+      //res.setHeader('Content-Range', `bytes ${options.range.start}-${options.range.end}/*`);
+      //res.setHeader('Content-Range', `bytes ${options.start}-${options.end}/${stats.size}`);
+      //res.setHeader('Content-Length', len + 1);
+      res.setHeader('Accept-Ranges', 'bytes');
+      //res.setHeader('Content-Type', 'application/octet-stream');
     }
 
-    res.writeHead(200, {'Content-type':'application/octet-stream'});
+    //res.responseCode = 206;
+    //res.writeHead(200, {'Content-type':'application/octet-stream'});
+    //res.setHeader('Content-type', 'application/octet-stream');
 
     const requestId = rsClient.getRequestId();
 
