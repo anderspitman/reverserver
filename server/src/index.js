@@ -43,11 +43,6 @@ function (wsStreamify, fileReaderStream) {
     }
 
     createStream(settings, callback) {
-      //const wsStream = wsStreamMaker(this._wsStreamString, {
-      //  perMessageDeflate: false,
-      //  // 10MB unless my math is wrong
-      //  browserBufferSize: 10 * 1024 * 1024,
-      //});
 
       const socket = new WebSocket(this._wsStreamString)
       socket.addEventListener('open', (e) => {
@@ -58,7 +53,6 @@ function (wsStreamify, fileReaderStream) {
         stream._id = this._nextId;
         this._nextId += 1;
 
-        console.log(stream);
         callback(stream);
       });
     }
@@ -110,8 +104,6 @@ function (wsStreamify, fileReaderStream) {
                   file = file.slice(message.range.start);
                 }
               }
-
-              console.log(message.range, file.size);
 
               const fileStream = fileReaderStream(file);
               const streamSettings = {
