@@ -1,29 +1,26 @@
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as an anonymous module. Also return global
-    define(['websocket-stream', 'ws-streamify', 'filereader-stream'],
-    function(websocket, wsStreamify, fileReaderStream) {
-      return (root.reverserver = factory(websocket, wsStreamify, fileReaderStream));
+    define(['ws-streamify', 'filereader-stream'],
+    function(wsStreamify, fileReaderStream) {
+      return (root.reverserver = factory(wsStreamify, fileReaderStream));
     });
   } else if (typeof module === 'object' && module.exports) {
     // Node. Does not work with strict CommonJS, but
     // only CommonJS-like environments that support module.exports,
     // like Node.
     module.exports = factory(
-      require('websocket-stream'),
+      require('ws-streamify'),
       require('filereader-stream'));
   } else {
     // Browser globals (root is window)
-    root.reverserver = factory(websocket, fileReaderStream);
+    root.reverserver = factory(wsStreamify, fileReaderStream);
   }
 }(typeof self !== 'undefined' ? self : this,
 
-function (wsStreamMaker, wsStreamify, fileReaderStream) {
-
-  console.log(wsStreamify);
+function (wsStreamify, fileReaderStream) {
 
   const WebSocketStream = wsStreamify.default;
-
 
   class StreamPool {
     constructor({ host, port }) {
