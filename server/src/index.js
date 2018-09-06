@@ -1,9 +1,9 @@
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as an anonymous module. Also return global
-    define(['websocket-stream', 'filereader-stream'],
-    function(websocket, fileReaderStream) {
-      return (root.reverserver = factory(websocket, fileReaderStream));
+    define(['websocket-stream', 'ws-streamify', 'filereader-stream'],
+    function(websocket, wsStreamify, fileReaderStream) {
+      return (root.reverserver = factory(websocket, wsStreamify, fileReaderStream));
     });
   } else if (typeof module === 'object' && module.exports) {
     // Node. Does not work with strict CommonJS, but
@@ -18,7 +18,11 @@
   }
 }(typeof self !== 'undefined' ? self : this,
 
-function (wsStreamMaker, fileReaderStream) {
+function (wsStreamMaker, wsStreamify, fileReaderStream) {
+
+  console.log(wsStreamify);
+
+  const WebSocketStream = wsStreamify.default;
 
 
   class StreamPool {
@@ -41,18 +45,25 @@ function (wsStreamMaker, fileReaderStream) {
       this._idleStreams.push(stream);
     }
 
-    createStream() {
-      const wsStream = wsStreamMaker(this._wsStreamString, {
-        perMessageDeflate: false,
-        // 10MB unless my math is wrong
-        browserBufferSize: 10 * 1024 * 1024,
+    createStream(settings, callback) {
+      //const wsStream = wsStreamMaker(this._wsStreamString, {
+      //  perMessageDeflate: false,
+      //  // 10MB unless my math is wrong
+      //  browserBufferSize: 10 * 1024 * 1024,
+      //});
+
+      const socket = new WebSocket(this._wsStreamString)
+      socket.addEventListener('open', (e) => {
+        socket.send(JSON.stringify(settings));
+
+        const stream = new WebSocketStream(socket, { highWaterMark: 1024 })
+
+        stream._id = this._nextId;
+        this._nextId += 1;
+
+        console.log(stream);
+        callback(stream);
       });
-
-      wsStream._id = this._nextId;
-      this._nextId += 1;
-
-      console.log(wsStream);
-      return wsStream;
     }
 
     _addStream() {
@@ -106,13 +117,15 @@ function (wsStreamMaker, fileReaderStream) {
               console.log(message.range, file.size);
 
               const fileStream = fileReaderStream(file);
-              const stream = this._streamPool.createStream();
-              stream.write(JSON.stringify({
+              const streamSettings = {
                 id: message.requestId,
                 size: fullFile.size,
                 range: message.range,
-              }));
-              fileStream.pipe(stream);
+              };
+
+              this._streamPool.createStream(streamSettings, (stream) => {
+                fileStream.pipe(stream);
+              });
             }
             else {
               console.log(`File ${message.url} not found`);
